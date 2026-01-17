@@ -3,27 +3,28 @@ package top.bogey.ocr.baidu.paddle;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
+import android.graphics.RectF;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
+import top.bogey.ocr.OcrNativeResult;
 import top.bogey.ocr.OcrResult;
 
 public class Ocr {
-    private final static String KEYS = "keys.txt";
-    private final static String DET = "det.nb";     // 文字区域检测
-    private final static String CLS = "cls.nb";     // 文字方向分类
-    private final static String REC = "rec.nb";     // 文字识别
-    private final static List<String> labels = new ArrayList<>();
+    private final static String KEYS = "keys_v5.txt";
+    private final static String DET = "ocr_det_fp16.tflite";     // 文字区域检测
+    private final static String REC = "ocr_rec_fp16.tflite";     // 文字识别
+    private final static String NPU_CACHE_DIR = "npu_cache";
+    private boolean npuCacheInited = false;
+
     private long module = 0;
 
     private static Ocr instance;
@@ -34,93 +35,70 @@ public class Ocr {
     }
 
     public Ocr(Context context) {
-        loadModule(context);
+        initNpuCache(context);
+
+        String detPath = copyAssetToCache(context, DET);
+        String recPath = copyAssetToCache(context, REC);
+        String keysPath = copyAssetToCache(context, KEYS);
+        module = nativeCreate(detPath, recPath, keysPath);
     }
 
-    private void loadModule(Context context) {
-        String path = context.getCacheDir().getAbsolutePath();
-        copyFileFromAssets(context, DET, path + File.separator + DET);
-        copyFileFromAssets(context, CLS, path + File.separator + CLS);
-        copyFileFromAssets(context, REC, path + File.separator + REC);
+    private void initNpuCache(Context context) {
+        if (npuCacheInited) return;
+        File cacheDir = new File(context.getCacheDir(), NPU_CACHE_DIR);
+        if (!cacheDir.exists()) cacheDir.mkdirs();
+        nativeSetCacheDir(cacheDir.getAbsolutePath());
+        npuCacheInited = true;
+    }
 
-        module = initModule(path + File.separator + DET, path + File.separator + REC, path + File.separator + CLS);
-
-        labels.add("black");
-        try (InputStream inputStream = context.getAssets().open(KEYS)) {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                labels.add(line);
+    public List<OcrResult> runOcr(Bitmap bitmap) {
+        if (module != 0) {
+            List<OcrResult> results = new ArrayList<>();
+            LetterBox letterBox = null;
+            if (bitmap.getWidth() < 640 || bitmap.getHeight() < 640) {
+                letterBox = LetterBox.create(bitmap, 640, 640);
+                bitmap = letterBox.bitmap();
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        labels.add(" ");
-    }
+            for (OcrNativeResult nativeResult : nativeRunOcr(module, bitmap)) {
+                RectF area = nativeResult.getArea();
+                Rect rect = new Rect();
+                if (letterBox != null) {
+                    float offsetX = letterBox.offsetX();
+                    float offsetY = letterBox.offsetY();
+                    float scale = letterBox.scale();
 
-    public List<OcrResult> runOcr(Bitmap image) {
-        List<OcrResult> results = new ArrayList<>();
-        if (module == 0) return results;
-        if (image == null) return results;
-
-        float[] ocrData = forward(module, image, Math.max(image.getWidth(), image.getHeight()), 1, 0, 1);
-        int begin = 0;
-        while (begin < ocrData.length) {
-            int pointNum = Math.round(ocrData[begin]);
-            int wordNum = Math.round(ocrData[begin + 1]);
-            int similar = Math.round(ocrData[begin + 2] * 100);
-
-            int current = begin + 3;
-            Rect rect = new Rect();
-            boolean init = false;
-            for (int i = 0; i < pointNum; i++) {
-                int x = Math.round(ocrData[current + i * 2]);
-                int y = Math.round(ocrData[current + i * 2 + 1]);
-                if (init) {
-                    rect.left = Math.min(x, rect.left);
-                    rect.right = Math.max(x, rect.right);
-                    rect.top = Math.min(y, rect.top);
-                    rect.bottom = Math.max(y, rect.bottom);
+                    float left = (area.left - offsetX) / scale;
+                    float right = (area.right - offsetX) / scale;
+                    float top = (area.top - offsetY) / scale;
+                    float bottom = (area.bottom - offsetY) / scale;
+                    rect.set((int) left, (int) top, (int) right, (int) bottom);
                 } else {
-                    rect.set(x, y, x, y);
-                    init = true;
+                    rect.set((int) area.left, (int) area.top, (int) area.right, (int) area.bottom);
                 }
+
+                OcrResult ocrResult = new OcrResult(rect, nativeResult.getText(), (int) (nativeResult.getSimilar() * 100));
+                results.add(ocrResult);
             }
-
-            StringBuilder builder = new StringBuilder();
-            current += (pointNum * 2);
-            for (int i = 0; i < wordNum; i++) {
-                int index = Math.round(ocrData[current + i]);
-                builder.append(labels.get(index));
-            }
-
-            results.add(new OcrResult(rect, builder.toString(), similar));
-
-            begin += (3 + pointNum * 2 + wordNum + 2);
+            return results;
         }
-
-        results.sort((o1, o2) -> {
-            int topOffset = -(o1.getArea().top - o2.getArea().top);
-            if (Math.abs(topOffset) <= 10) {
-                return -(o1.getArea().left - o2.getArea().left);
-            } else {
-                return topOffset;
-            }
-        });
-
-        return results;
+        return new ArrayList<>();
     }
 
     public void releaseModule() {
         if (module != 0) {
-            releaseModule(module);
+            nativeRelease(module);
+            module = 0;
         }
+        nativeShutdown();
     }
 
-    public static void copyFileFromAssets(Context context, String from, String to) {
-        if (from == null || from.isEmpty() || to == null || to.isEmpty()) return;
-        try (InputStream inputStream = new BufferedInputStream(context.getAssets().open(from));
-             OutputStream outputStream = new BufferedOutputStream(new FileOutputStream(to))) {
+    public static String copyAssetToCache(Context context, String fileName) {
+        File cacheDir = context.getCacheDir();
+        File cacheFile = new File(cacheDir, fileName);
+        if (cacheFile.exists()) return cacheFile.getAbsolutePath();
+
+        try (InputStream inputStream = new BufferedInputStream(context.getAssets().open(fileName));
+             OutputStream outputStream = new BufferedOutputStream(new FileOutputStream(cacheFile))) {
             byte[] buffer = new byte[1024];
             int length;
             while ((length = inputStream.read(buffer)) != -1) {
@@ -130,11 +108,16 @@ public class Ocr {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        return cacheFile.getAbsolutePath();
     }
 
-    private static native long initModule(String det, String rec, String cls);
+    private static native void nativeSetCacheDir(String cacheDir);
 
-    private static native float[] forward(long module, Bitmap image, int size, int det, int cls, int rec);
+    private static native long nativeCreate(String detPath, String recPath, String keysPath);
 
-    private static native void releaseModule(long module);
+    private static native void nativeRelease(long module);
+
+    private static native void nativeShutdown();
+
+    private static native OcrNativeResult[] nativeRunOcr(long module, Bitmap bitmap);
 }

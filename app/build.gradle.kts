@@ -9,8 +9,8 @@ plugins {
 android {
     namespace = "top.bogey.ocr.baidu.paddle"
     compileSdk = 36
-    buildToolsVersion = "36.0.0"
-    ndkVersion = "27.2.12479018"
+    ndkVersion = "29.0.14206865"
+    buildToolsVersion = "36.1.0"
 
     val pattern = DateTimeFormatter.ofPattern("yyMMdd_HHmm")
     val now = LocalDateTime.now().format(pattern)
@@ -24,14 +24,7 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags.add("-std=c++14")
-                cppFlags.add("-frtti")
-                cppFlags.add("-fexceptions")
-                cppFlags.add("-Wno-format")
-
-                arguments.add("-DANDROID_PLATFORM=android-35")
-                arguments.add("-DANDROID_STL=c++_shared")
-                arguments.add("-DANDROID_ARM_NEON=TRUE")
+                cppFlags.add("-std=c++17")
             }
         }
 
@@ -73,7 +66,7 @@ android {
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.31.6"
+            version = "4.1.2"
         }
     }
 

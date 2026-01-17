@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.util.Log;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -14,7 +15,7 @@ import top.bogey.ocr.baidu.paddle.Ocr;
 
 public class OcrService extends Service {
     static {
-        System.loadLibrary("native");
+        System.loadLibrary("ppocrv5_jni");
     }
 
     private final IOcr.Stub binder = new IOcr.Stub() {
@@ -24,6 +25,7 @@ public class OcrService extends Service {
                 executor.execute(() -> {
                     List<OcrResult> results = Ocr.getInstance(OcrService.this).runOcr(bitmap);
                     try {
+                        Log.d("TAG", "runOcr: " + results);
                         callback.onResult(results);
                     } catch (RemoteException e) {
                         throw new RuntimeException(e);

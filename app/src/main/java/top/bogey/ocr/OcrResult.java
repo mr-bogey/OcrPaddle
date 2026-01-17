@@ -46,6 +46,15 @@ public class OcrResult implements Parcelable {
     }
 
     @Override
+    public String toString() {
+        return "OcrResult{" +
+                "area=" + area +
+                ", text='" + text + '\'' +
+                ", similar=" + similar +
+                '}';
+    }
+
+    @Override
     public int describeContents() {
         return 0;
     }
