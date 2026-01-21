@@ -21,21 +21,19 @@
 
 namespace ppocrv5::image_utils {
 
-    void ResizeBilinear(const uint8_t *src, int src_w, int src_h, int src_stride,
-                        uint8_t *dst, int dst_w, int dst_h);
+    void ResizeBilinear(const uint8_t *src, int src_w, int src_h, int src_stride, uint8_t *dst, int dst_w, int dst_h);
+
+    void ResizeBilinearLetterbox(const uint8_t *src, int src_w, int src_h, int src_stride, uint8_t *dst, int dst_w, int dst_h, float& scale, int& offset_x, int& offset_y);
 
     void NormalizeImageNet(const uint8_t *src, int w, int h, int stride, float *dst);
 
     void NormalizeRecognition(const uint8_t *src, int w, int h, int stride, float *dst);
 
-    void PerspectiveTransform(const uint8_t *src, int src_w, int src_h, int stride,
-                              const float *src_points, float *dst, int dst_w, int dst_h);
+    void PerspectiveTransform(const uint8_t *src, int src_w, int src_h, int stride, const float *src_points, float *dst, int dst_w, int dst_h);
 
-    void PerspectiveTransformFloat32Raw(const uint8_t *src, int src_w, int src_h, int stride,
-                                        const float *src_points, float *dst, int dst_w, int dst_h);
+    void PerspectiveTransformFloat32Raw(const uint8_t *src, int src_w, int src_h, int stride, const float *src_points, float *dst, int dst_w, int dst_h);
 
-    void PerspectiveTransformUint8(const uint8_t *src, int src_w, int src_h, int stride,
-                                   const float *src_points, uint8_t *dst, int dst_w, int dst_h);
+    void PerspectiveTransformUint8(const uint8_t *src, int src_w, int src_h, int stride, const float *src_points, uint8_t *dst, int dst_w, int dst_h);
 
 }  // namespace ppocrv5::image_utils
 

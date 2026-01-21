@@ -240,6 +240,66 @@ namespace ppocrv5::image_utils {
         }
     }
 
+    void ResizeBilinearLetterbox(const uint8_t *src, int src_w, int src_h, int src_stride, uint8_t *dst, int dst_w, int dst_h, float &scale, int &offset_x, int &offset_y) {
+        constexpr uint8_t PAD = 114;
+        constexpr uint8_t PAD_A = 255;
+
+        int dst_stride = dst_w * 4;
+
+        // 填充背景
+        for (int y = 0; y < dst_h; ++y) {
+            uint8_t *row = dst + y * dst_stride;
+            for (int x = 0; x < dst_w; ++x) {
+                row[x * 4 + 0] = PAD;
+                row[x * 4 + 1] = PAD;
+                row[x * 4 + 2] = PAD;
+                row[x * 4 + 3] = PAD_A;
+            }
+        }
+
+        scale = std::min(static_cast<float>(dst_w) / src_w, static_cast<float>(dst_h) / src_h);
+
+        int new_w = std::max(1, static_cast<int>(std::round(src_w * scale)));
+        int new_h = std::max(1, static_cast<int>(std::round(src_h * scale)));
+
+        offset_x = (dst_w - new_w) / 2;
+        offset_y = (dst_h - new_h) / 2;
+
+        float scale_x = static_cast<float>(src_w) / new_w;
+        float scale_y = static_cast<float>(src_h) / new_h;
+
+        for (int y = 0; y < new_h; ++y) {
+            float src_y = Clamp((y + 0.5f) * scale_y - 0.5f, 0.f, src_h - 1.f);
+            int y0 = static_cast<int>(src_y);
+            int y1 = std::min(y0 + 1, src_h - 1);
+            float dy = src_y - y0;
+
+            const uint8_t *row0 = src + y0 * src_stride;
+            const uint8_t *row1 = src + y1 * src_stride;
+            uint8_t *dst_row = dst + (y + offset_y) * dst_stride + (offset_x * 4);
+
+            for (int x = 0; x < new_w; ++x) {
+                float src_x = Clamp((x + 0.5f) * scale_x - 0.5f, 0.f, src_w - 1.f);
+                int x0 = static_cast<int>(src_x);
+                int x1 = std::min(x0 + 1, src_w - 1);
+                float dx = src_x - x0;
+
+                float w00 = (1.0f - dx) * (1.0f - dy);
+                float w01 = dx * (1.0f - dy);
+                float w10 = (1.0f - dx) * dy;
+                float w11 = dx * dy;
+
+                uint8_t *out = dst_row + x * 4;
+                for (int c = 0; c < 3; ++c) {
+                    float v = row0[x0 * 4 + c] * w00 + row0[x1 * 4 + c] * w01 +
+                              row1[x0 * 4 + c] * w10 + row1[x1 * 4 + c] * w11;
+                    out[c] = static_cast<uint8_t>(Clamp(v, 0.f, 255.f));
+                }
+                out[3] = 255;
+            }
+        }
+    }
+
     void NormalizeImageNet(const uint8_t *src, int w, int h, int stride, float *dst) {
         for (int y = 0; y < h; ++y) {
             const uint8_t *row = src + y * stride;

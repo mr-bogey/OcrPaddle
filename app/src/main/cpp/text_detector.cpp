@@ -90,8 +90,9 @@ namespace ppocrv5 {
         std::vector<litert::TensorBuffer> input_buffers_;
         std::vector<litert::TensorBuffer> output_buffers_;
 
-        float scale_x_ = 1.0f;
-        float scale_y_ = 1.0f;
+        float scale_ = 1.0f;
+        int offset_x_ = 0;
+        int offset_y_ = 0;
 
         // Pre-allocated buffers with cache-line alignment
         alignas(64) std::vector<uint8_t> resized_buffer_;
@@ -265,11 +266,7 @@ namespace ppocrv5 {
                                         float *detection_time_ms) {
             auto start_time = std::chrono::high_resolution_clock::now();
 
-            scale_x_ = static_cast<float>(width) / kDetInputSize;
-            scale_y_ = static_cast<float>(height) / kDetInputSize;
-
-            image_utils::ResizeBilinear(image_data, width, height, stride,
-                                        resized_buffer_.data(), kDetInputSize, kDetInputSize);
+            image_utils::ResizeBilinearLetterbox(image_data, width, height, stride, resized_buffer_.data(), kDetInputSize, kDetInputSize, scale_, offset_x_, offset_y_);
 
             if (input_is_quantized_) {
                 PrepareQuantizedInput();
@@ -357,10 +354,10 @@ namespace ppocrv5 {
 
                 UnclipBox(rect, kUnclipRatio);
 
-                rect.center_x *= scale_x_;
-                rect.center_y *= scale_y_;
-                rect.width *= scale_x_;
-                rect.height *= scale_y_;
+                rect.center_x = (rect.center_x - offset_x_) / scale_;
+                rect.center_y = (rect.center_y - offset_y_) / scale_;
+                rect.width /= scale_;
+                rect.height /= scale_;
                 rect.confidence = box_score;
 
                 boxes.push_back(rect);

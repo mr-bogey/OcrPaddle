@@ -30,7 +30,7 @@ public class Ocr {
     private static Ocr instance;
 
     public static Ocr getInstance(Context context) {
-        if (instance == null) instance = new Ocr(context);
+        if (instance == null || instance.module == 0) instance = new Ocr(context);
         return instance;
     }
 
@@ -54,28 +54,10 @@ public class Ocr {
     public List<OcrResult> runOcr(Bitmap bitmap) {
         if (module != 0) {
             List<OcrResult> results = new ArrayList<>();
-            LetterBox letterBox = null;
-            if (bitmap.getWidth() < 640 || bitmap.getHeight() < 640) {
-                letterBox = LetterBox.create(bitmap, 640, 640);
-                bitmap = letterBox.bitmap();
-            }
             for (OcrNativeResult nativeResult : nativeRunOcr(module, bitmap)) {
                 RectF area = nativeResult.getArea();
                 Rect rect = new Rect();
-                if (letterBox != null) {
-                    float offsetX = letterBox.offsetX();
-                    float offsetY = letterBox.offsetY();
-                    float scale = letterBox.scale();
-
-                    float left = (area.left - offsetX) / scale;
-                    float right = (area.right - offsetX) / scale;
-                    float top = (area.top - offsetY) / scale;
-                    float bottom = (area.bottom - offsetY) / scale;
-                    rect.set((int) left, (int) top, (int) right, (int) bottom);
-                } else {
-                    rect.set((int) area.left, (int) area.top, (int) area.right, (int) area.bottom);
-                }
-
+                rect.set((int) area.left, (int) area.top, (int) area.right, (int) area.bottom);
                 OcrResult ocrResult = new OcrResult(rect, nativeResult.getText(), (int) (nativeResult.getSimilar() * 100));
                 results.add(ocrResult);
             }
