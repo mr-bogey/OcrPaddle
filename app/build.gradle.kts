@@ -1,4 +1,5 @@
-import com.android.build.gradle.internal.api.BaseVariantOutputImpl
+import com.android.build.api.dsl.ApplicationExtension
+import com.android.build.gradle.tasks.PackageAndroidArtifact
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -6,25 +7,25 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
-android {
-    namespace = "top.bogey.ocr.baidu.paddle"
-    compileSdk = 36
-    ndkVersion = "29.0.14206865"
-    buildToolsVersion = "36.1.0"
+val pattern: DateTimeFormatter? = DateTimeFormatter.ofPattern("yyMMdd_HHmm")
+val now: String? = LocalDateTime.now().format(pattern)
 
-    val pattern = DateTimeFormatter.ofPattern("yyMMdd_HHmm")
-    val now = LocalDateTime.now().format(pattern)
+configure<ApplicationExtension> {
+    namespace = "top.bogey.ocr.baidu.paddle"
+    compileSdk = common.versions.compileSdk.get().toInt()
+    ndkVersion = common.versions.ndkVersion.get()
+    buildToolsVersion = common.versions.buildToolsVersion.get()
 
     defaultConfig {
         applicationId = "top.bogey.ocr.baidu.paddle"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = common.versions.compileSdk.get().toInt()
         versionCode = 1
         versionName = now
 
         externalNativeBuild {
             cmake {
-                cppFlags.add("-std=c++17")
+                arguments.add("-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON")
             }
         }
 
@@ -49,15 +50,6 @@ android {
         }
     }
 
-    applicationVariants.all {
-        outputs.all {
-            if (buildType.name == "release") {
-                val impl = this as BaseVariantOutputImpl
-                impl.outputFileName = "点击助手_Ocr_By_Baidu_PaddleOcr_$now.APK"
-            }
-        }
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
@@ -66,12 +58,24 @@ android {
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
-            version = "4.1.2"
+            version = common.versions.cmakeVersion.get()
         }
     }
 
     buildFeatures {
         aidl = true
+    }
+}
+
+tasks.withType<PackageAndroidArtifact>().configureEach {
+    if (name.contains("release", true)) {
+        doLast {
+            val dir = outputDirectory.get().asFile
+            val apk = dir.listFiles()?.firstOrNull { it.extension == "apk" } ?: return@doLast
+
+            val target = File(dir, "点击助手_Ocr_By_Baidu_PaddleOcr_${now}.APK")
+            apk.copyTo(target, true)
+        }
     }
 }
 

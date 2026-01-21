@@ -17,6 +17,12 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
     }
+
+    versionCatalogs {
+        create("common") {
+            from(files("AndroidBuildConfig/common.versions.toml"))
+        }
+    }
 }
 
 rootProject.name = "OcrPaddle"

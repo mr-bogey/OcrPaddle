@@ -2,38 +2,39 @@ package top.bogey.ocr;
 
 import android.app.Service;
 import android.content.Intent;
+import android.content.res.AssetManager;
 import android.graphics.Bitmap;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.os.IBinder;
 import android.os.RemoteException;
-import android.util.Log;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
-import top.bogey.ocr.baidu.paddle.Ocr;
 
 public class OcrService extends Service {
     static {
-        System.loadLibrary("ppocrv5_jni");
+        System.loadLibrary("native");
     }
 
     private final IOcr.Stub binder = new IOcr.Stub() {
         @Override
-        public void runOcr(Bitmap bitmap, IOcrCallback callback) {
-            try(ExecutorService executor = Executors.newSingleThreadExecutor()) {
-                executor.execute(() -> {
-                    List<OcrResult> results = Ocr.getInstance(OcrService.this).runOcr(bitmap);
-                    try {
-                        Log.d("TAG", "runOcr: " + results);
-                        callback.onResult(results);
-                    } catch (RemoteException e) {
-                        throw new RuntimeException(e);
-                    }
-                });
-            } catch (Exception e) {
-                throw new RuntimeException(e);
+        public void runOcr(Bitmap bitmap, IOcrCallback callback) throws RemoteException {
+            OcrNativeResult[] nativeResults = runModel(bitmap);
+            List<OcrResult> results = new ArrayList<>();
+            if (nativeResults == null || nativeResults.length == 0) {
+                callback.onResult(results);
+                return;
             }
+
+            for (OcrNativeResult nativeResult : nativeResults) {
+                RectF area = nativeResult.getArea();
+                Rect rect = new Rect();
+                rect.set((int) area.left, (int) area.top, (int) area.right, (int) area.bottom);
+                OcrResult ocrResult = new OcrResult(rect, nativeResult.getText(), (int) (nativeResult.getSimilar() * 100));
+                results.add(ocrResult);
+            }
+            callback.onResult(results);
         }
     };
 
@@ -43,8 +44,20 @@ public class OcrService extends Service {
     }
 
     @Override
+    public void onCreate() {
+        super.onCreate();
+        loadModel(getAssets());
+    }
+
+    @Override
     public void onDestroy() {
         super.onDestroy();
-        Ocr.getInstance(this).releaseModule();
+        releaseModel();
     }
+
+    private native boolean loadModel(AssetManager manager);
+
+    private native void releaseModel();
+
+    private native OcrNativeResult[] runModel(Bitmap bitmap);
 }
