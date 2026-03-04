@@ -155,10 +155,10 @@ jobs:
           print("Loading Rec model...")
           model = onnx.load("models_tmp/ocr_rec_v5.onnx")
 
-          print("Running simplification with static shape [1, 3, 48, 640]...")
+          print("Running simplification with static shape [1, 3, 48, 480]...")
           model_simp, check = simplify(
               model,
-              overwrite_input_shapes={"x": [1, 3, 48, 640]},
+              overwrite_input_shapes={"x": [1, 3, 48, 480]},
               perform_optimization=True,
               skip_fuse_bn=False,
               skip_constant_folding=False,
@@ -272,7 +272,7 @@ jobs:
           # -ois: Override input shape
           onnx2tf -i models_tmp/ocr_rec_v5_fixed.onnx -o models_tmp/converted_rec \
             -b 1 \
-            -ois x:1,3,48,640 \
+            -ois x:1,3,48,480 \
             -n || { echo "onnx2tf failed for Rec model"; exit 1; }
 
           echo "Generated files:"
@@ -339,7 +339,7 @@ jobs:
 
           models = [
               ('app/src/main/assets/models/ocr_det_fp16.tflite', [1, 640, 640, 3], 'Detection'),
-              ('app/src/main/assets/models/ocr_rec_fp16.tflite', [1, 48, 640, 3], 'Recognition'),
+              ('app/src/main/assets/models/ocr_rec_fp16.tflite', [1, 48, 480, 3], 'Recognition'),
           ]
 
           print("=" * 70)
