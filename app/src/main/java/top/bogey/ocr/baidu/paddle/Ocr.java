@@ -21,7 +21,8 @@ import top.bogey.ocr.OcrResult;
 public class Ocr {
     private final static String KEYS = "keys_v5.txt";
     private final static String DET = "ocr_det_fp16.tflite";     // 文字区域检测
-    private final static String REC = "ocr_rec_fp16.tflite";     // 文字识别
+    private final static String REC_SMALL = "ocr_rec_320_fp16.tflite";     // 文字识别 320
+    private final static String REC_LARGE = "ocr_rec_640_fp16.tflite"; // 文字识别 640
     private final static String NPU_CACHE_DIR = "npu_cache";
     private boolean npuCacheInited = false;
 
@@ -38,9 +39,10 @@ public class Ocr {
         initNpuCache(context);
 
         String detPath = copyAssetToCache(context, DET);
-        String recPath = copyAssetToCache(context, REC);
+        String recSmallPath = copyAssetToCache(context, REC_SMALL);
+        String recLargePath = copyAssetToCache(context, REC_LARGE);
         String keysPath = copyAssetToCache(context, KEYS);
-        module = nativeCreate(detPath, recPath, keysPath);
+        module = nativeCreate(detPath, recSmallPath, recLargePath, keysPath);
     }
 
     private void initNpuCache(Context context) {
@@ -95,7 +97,7 @@ public class Ocr {
 
     private static native void nativeSetCacheDir(String cacheDir);
 
-    private static native long nativeCreate(String detPath, String recPath, String keysPath);
+    private static native long nativeCreate(String detPath, String recSmallPath, String recLargePath, String keysPath);
 
     private static native void nativeRelease(long module);
 

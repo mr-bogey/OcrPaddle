@@ -41,6 +41,18 @@ namespace ppocrv5 {
         constexpr float kMinConfidenceThreshold = 0.0f;
         constexpr int kMaxBoxesPerFrame = 50;
 
+        constexpr int kRecInputHeight = 48;
+
+        inline int CalculateTargetWidth(const RotatedRect &box) {
+            float src_width = box.width;
+            float src_height = box.height;
+            if (src_width < src_height) {
+                std::swap(src_width, src_height);
+            }
+            const float aspect_ratio = src_width / std::max(src_height, 1.0f);
+            return static_cast<int>(kRecInputHeight * aspect_ratio);
+        }
+
         int GetFallbackStartIndex(AcceleratorType requested) {
             switch (requested) {
                 case AcceleratorType::kGpu:
@@ -77,7 +89,8 @@ namespace ppocrv5 {
 
     std::unique_ptr<OcrEngine> OcrEngine::Create(
             const std::string &det_model_path,
-            const std::string &rec_model_path,
+            const std::string &rec_model_path_small,
+            const std::string &rec_model_path_large,
             const std::string &keys_path,
             AcceleratorType accelerator_type) {
 
@@ -96,15 +109,27 @@ namespace ppocrv5 {
                 continue;
             }
 
-            auto recognizer = TextRecognizer::Create(rec_model_path, keys_path, current_accelerator);
-            if (!recognizer) {
-                LOGD(TAG, "TextRecognizer failed with %s, trying next",
+            auto recognizer_small = TextRecognizer::Create(
+                    rec_model_path_small, keys_path, current_accelerator,
+                    RecInputWidth::kW320);
+            if (!recognizer_small) {
+                LOGD(TAG, "TextRecognizer (320) failed with %s, trying next",
+                     AcceleratorName(current_accelerator));
+                continue;
+            }
+
+            auto recognizer_large = TextRecognizer::Create(
+                    rec_model_path_large, keys_path, current_accelerator,
+                    RecInputWidth::kW640);
+            if (!recognizer_large) {
+                LOGD(TAG, "TextRecognizer (640) failed with %s, trying next",
                      AcceleratorName(current_accelerator));
                 continue;
             }
 
             engine->detector_ = std::move(detector);
-            engine->recognizer_ = std::move(recognizer);
+            engine->recognizer_small_ = std::move(recognizer_small);
+            engine->recognizer_large_ = std::move(recognizer_large);
             engine->active_accelerator_ = current_accelerator;
 
             LOGD(TAG, "OcrEngine initialized with %s accelerator",
@@ -120,7 +145,7 @@ namespace ppocrv5 {
 
     std::vector<OcrResult> OcrEngine::Process(const uint8_t *image_data,
                                               int width, int height, int stride) {
-        if (!detector_ || !recognizer_) {
+        if (!detector_ || !recognizer_small_ || !recognizer_large_) {
             LOGE(TAG, "OcrEngine not properly initialized");
             return {};
         }
@@ -171,7 +196,18 @@ namespace ppocrv5 {
         for (size_t idx: sorted_indices) {
             const auto &box = filtered_boxes[idx];
             float rec_time_ms = 0.0f;
-            auto rec_result = recognizer_->Recognize(image_data, width, height, stride,
+
+            int target_width = CalculateTargetWidth(box);
+            TextRecognizer *recognizer = nullptr;
+            if (target_width <= 320) {
+                recognizer = recognizer_small_.get();
+                LOGD(TAG, "Using 320 model: box_width=%.1f, target_width=%d", box.width, target_width);
+            } else {
+                recognizer = recognizer_large_.get();
+                LOGD(TAG, "Using 640 model: box_width=%.1f, target_width=%d", box.width, target_width);
+            }
+
+            auto rec_result = recognizer->Recognize(image_data, width, height, stride,
                                                      box, &rec_time_ms);
 
             if (!rec_result.text.empty() && rec_result.confidence >= kMinConfidenceThreshold) {

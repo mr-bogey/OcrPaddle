@@ -53,7 +53,8 @@ namespace ppocrv5 {
     public:
         static std::unique_ptr<OcrEngine> Create(
                 const std::string &det_model_path,
-                const std::string &rec_model_path,
+                const std::string &rec_model_path_small,
+                const std::string &rec_model_path_large,
                 const std::string &keys_path,
                 AcceleratorType accelerator_type);
 
@@ -70,7 +71,8 @@ namespace ppocrv5 {
         void WarmUp();
 
         std::unique_ptr<TextDetector> detector_;
-        std::unique_ptr<TextRecognizer> recognizer_;
+        std::unique_ptr<TextRecognizer> recognizer_small_;
+        std::unique_ptr<TextRecognizer> recognizer_large_;
         Benchmark benchmark_;
         AcceleratorType active_accelerator_ = AcceleratorType::kCpu;
     };

@@ -58,7 +58,8 @@ namespace ppocrv5 {
     namespace {
 
         constexpr int kRecInputHeight = 48;
-        constexpr int kRecInputWidth = 320;
+        constexpr int kRecInputWidthSmall = 320;
+        constexpr int kRecInputWidthLarge = 640;
         constexpr int kBlankIndex = 0;
 
         constexpr float kRecMean = 127.5f;
@@ -279,6 +280,7 @@ namespace ppocrv5 {
 
         int num_classes_ = 0;
         int time_steps_ = 0;
+        int input_width_ = kRecInputWidthSmall;
 
         ~Impl() = default;
 
@@ -298,6 +300,7 @@ namespace ppocrv5 {
                 }
                 dictionary_.push_back(std::move(line));
             }
+            dictionary_.emplace_back(" ");
 
             LOGD(TAG, "Loaded dictionary with %zu characters", dictionary_.size());
             return true;
@@ -305,7 +308,10 @@ namespace ppocrv5 {
 
         bool Initialize(const std::string &model_path,
                         const std::string &keys_path,
-                        AcceleratorType accelerator_type) {
+                        AcceleratorType accelerator_type,
+                        RecInputWidth input_width) {
+            input_width_ = static_cast<int>(input_width);
+
             if (!LoadDictionary(keys_path)) {
                 return false;
             }
@@ -343,7 +349,7 @@ namespace ppocrv5 {
             }
             compiled_model_ = std::move(*model_result);
 
-            std::vector<int> input_dims = {1, kRecInputHeight, kRecInputWidth, 3};
+            std::vector<int> input_dims = {1, kRecInputHeight, input_width_, 3};
             auto resize_result = compiled_model_->ResizeInputTensor(0, absl::MakeConstSpan(input_dims));
             if (!resize_result) {
                 LOGE(TAG, "Failed to resize input tensor: %s",
@@ -373,7 +379,7 @@ namespace ppocrv5 {
                     num_classes_ = static_cast<int>(dims[1]);
                 }
 
-                if (time_steps_ <= 0) time_steps_ = kRecInputWidth / 8;
+                if (time_steps_ <= 0) time_steps_ = input_width_ / 8;
                 if (num_classes_ <= 0) num_classes_ = static_cast<int>(dictionary_.size()) + 1;
                 LOGD(TAG, "Output: time_steps=%d, num_classes=%d", time_steps_, num_classes_);
             }
@@ -383,10 +389,10 @@ namespace ppocrv5 {
                 return false;
             }
 
-            input_buffer_.resize(kRecInputHeight * kRecInputWidth * 3, 0.0f);
+            input_buffer_.resize(kRecInputHeight * input_width_ * 3, 0.0f);
             output_buffer_.resize(time_steps_ * num_classes_);
 
-            LOGD(TAG, "TextRecognizer initialized with C++ API");
+            LOGD(TAG, "TextRecognizer initialized with width=%d", input_width_);
             return true;
         }
 
@@ -489,7 +495,7 @@ namespace ppocrv5 {
 
             const float aspect_ratio = src_width / std::max(src_height, 1.0f);
             target_width = static_cast<int>(kRecInputHeight * aspect_ratio);
-            target_width = std::clamp(target_width, 1, kRecInputWidth);
+            target_width = std::clamp(target_width, 1, input_width_);
 
             const float x0 = corners[0], y0 = corners[1];
             const float x1 = corners[2], y1 = corners[3];
@@ -525,7 +531,7 @@ namespace ppocrv5 {
             const int max_y = height - 2;
 
             for (int dy = 0; dy < kRecInputHeight; ++dy) {
-                float *__restrict__ dst_row = dst + dy * kRecInputWidth * 3;
+                float *__restrict__ dst_row = dst + dy * input_width_ * 3;
                 const float base_sx = x0 + a01 * dy;
                 const float base_sy = y0 + a11 * dy;
 
@@ -629,7 +635,7 @@ namespace ppocrv5 {
                                     const RotatedRect &box, float *recognition_time_ms) {
             auto start_time = std::chrono::high_resolution_clock::now();
 
-            int target_width = kRecInputWidth;
+            int target_width = input_width_;
             CropAndRotate(image_data, width, height, stride, box, target_width);
 
             auto write_result = input_buffers_[0].Write<float>(
@@ -673,11 +679,12 @@ namespace ppocrv5 {
     std::unique_ptr<TextRecognizer> TextRecognizer::Create(
             const std::string &model_path,
             const std::string &keys_path,
-            AcceleratorType accelerator_type) {
+            AcceleratorType accelerator_type,
+            RecInputWidth input_width) {
         auto recognizer = std::unique_ptr<TextRecognizer>(new TextRecognizer());
         recognizer->impl_ = std::make_unique<Impl>();
 
-        if (!recognizer->impl_->Initialize(model_path, keys_path, accelerator_type)) {
+        if (!recognizer->impl_->Initialize(model_path, keys_path, accelerator_type, input_width)) {
             LOGE(TAG, "Failed to initialize TextRecognizer");
             return nullptr;
         }

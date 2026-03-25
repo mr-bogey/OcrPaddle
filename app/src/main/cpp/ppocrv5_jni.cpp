@@ -113,21 +113,22 @@ Java_top_bogey_ocr_baidu_paddle_Ocr_nativeShutdown(JNIEnv *env, jclass clazz) {
 }
 
 JNIEXPORT jlong JNICALL
-Java_top_bogey_ocr_baidu_paddle_Ocr_nativeCreate(JNIEnv *env, jclass clazz, jstring det_model_path, jstring rec_model_path, jstring keys_path) {
+Java_top_bogey_ocr_baidu_paddle_Ocr_nativeCreate(JNIEnv *env, jclass clazz, jstring det_model_path, jstring rec_model_path_small, jstring rec_model_path_large, jstring keys_path) {
     std::string det_path = jstring_to_string(env, det_model_path);
-    std::string rec_path = jstring_to_string(env, rec_model_path);
+    std::string rec_small_path = jstring_to_string(env, rec_model_path_small);
+    std::string rec_large_path = jstring_to_string(env, rec_model_path_large);
     std::string keys = jstring_to_string(env, keys_path);
 
-    if (det_path.empty() || rec_path.empty() || keys.empty()) {
+    if (det_path.empty() || rec_small_path.empty() || rec_large_path.empty() || keys.empty()) {
         LOGE(TAG, "Invalid model paths provided");
         return 0;
     }
 
-    LOGD(TAG, "Creating OcrEngine: det=%s, rec=%s, keys=%s, accelerator=1", det_path.c_str(), rec_path.c_str(), keys.c_str());
+    LOGD(TAG, "Creating OcrEngine: det=%s, rec_small=%s, rec_large=%s, keys=%s, accelerator=1", det_path.c_str(), rec_small_path.c_str(), rec_large_path.c_str(), keys.c_str());
 
     ppocrv5::AcceleratorType accel_type = int_to_accelerator_type(1);
 
-    auto engine = ppocrv5::OcrEngine::Create(det_path, rec_path, keys, accel_type);
+    auto engine = ppocrv5::OcrEngine::Create(det_path, rec_small_path, rec_large_path, keys, accel_type);
     if (!engine) {
         LOGE(TAG, "Failed to create OcrEngine");
         return 0;

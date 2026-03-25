@@ -32,12 +32,18 @@ namespace ppocrv5 {
         float confidence = 0.0f;
     };
 
+    enum class RecInputWidth {
+        kW320 = 320,
+        kW640 = 640,
+    };
+
     class TextRecognizer {
     public:
         static std::unique_ptr<TextRecognizer> Create(
                 const std::string &model_path,
                 const std::string &keys_path,
-                AcceleratorType accelerator_type);
+                AcceleratorType accelerator_type,
+                RecInputWidth input_width = RecInputWidth::kW320);
 
         RecognitionResult Recognize(const uint8_t *image_data,
                                     int width, int height, int stride,
